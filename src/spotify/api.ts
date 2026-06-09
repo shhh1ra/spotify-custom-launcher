@@ -139,8 +139,11 @@ export async function getMyPlaylists(tokens: SpotifyTokens) {
   return spotifyFetch<Paging<SpotifyPlaylist>>("/me/playlists?limit=50", tokens);
 }
 
-export async function getSavedTracks(tokens: SpotifyTokens, limit = 50) {
-  const params = new URLSearchParams({ limit: String(limit) });
+export async function getSavedTracks(tokens: SpotifyTokens, limit = 50, offset = 0) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
   return spotifyFetch<Paging<PlaylistTrack>>(`/me/tracks?${params.toString()}`, tokens);
 }
 
@@ -148,9 +151,11 @@ export async function getPlaylistTracks(
   tokens: SpotifyTokens,
   playlistId: string,
   limit = 100,
+  offset = 0,
 ) {
   const params = new URLSearchParams({
     limit: String(limit),
+    offset: String(offset),
     fields:
       "items(added_at,track(id,name,uri,duration_ms,explicit,popularity,album(name,images),artists(name))),limit,next,offset,total",
   });

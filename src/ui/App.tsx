@@ -85,6 +85,10 @@ export function App() {
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistSummary | null>(null);
   const [playlistTracks, setPlaylistTracks] = useState<PlaylistTrack[]>([]);
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
+  const [loadingMoreTracks, setLoadingMoreTracks] = useState(false);
+  const [playlistHasMore, setPlaylistHasMore] = useState(false);
+  const [playlistOffset, setPlaylistOffset] = useState(0);
+  const [playlistScrolled, setPlaylistScrolled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localProgress, setLocalProgress] = useState(0);
 
@@ -159,17 +163,57 @@ export function App() {
     setSelectedPlaylist(playlist);
     setView("playlists");
     setLoadingPlaylists(true);
+    setPlaylistScrolled(false);
+    setPlaylistOffset(0);
+    setPlaylistHasMore(false);
     try {
       const response =
         playlist.kind === "liked"
-          ? await getSavedTracks(tokens, 50)
-          : await getPlaylistTracks(tokens, playlist.id, 100);
-      setPlaylistTracks((response?.items ?? []).filter((item) => item.track?.uri));
+          ? await getSavedTracks(tokens, 50, 0)
+          : await getPlaylistTracks(tokens, playlist.id, 50, 0);
+      const items = response?.items ?? [];
+      setPlaylistTracks(items.filter((item) => item.track?.uri));
+      setPlaylistOffset(items.length);
+      setPlaylistHasMore(Boolean(response?.next));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Playlist tracks unavailable");
       setPlaylistTracks([]);
     } finally {
       setLoadingPlaylists(false);
+    }
+  }
+
+  async function loadMorePlaylistTracks() {
+    if (!tokens || !selectedPlaylist || loadingPlaylists || loadingMoreTracks || !playlistHasMore) {
+      return;
+    }
+
+    setLoadingMoreTracks(true);
+    try {
+      const response =
+        selectedPlaylist.kind === "liked"
+          ? await getSavedTracks(tokens, 50, playlistOffset)
+          : await getPlaylistTracks(tokens, selectedPlaylist.id, 50, playlistOffset);
+      const items = response?.items ?? [];
+      setPlaylistTracks((current) => [
+        ...current,
+        ...items.filter((item) => item.track?.uri),
+      ]);
+      setPlaylistOffset((current) => current + items.length);
+      setPlaylistHasMore(Boolean(response?.next));
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "More tracks unavailable");
+    } finally {
+      setLoadingMoreTracks(false);
+    }
+  }
+
+  function handlePlaylistScroll(event: React.UIEvent<HTMLElement>) {
+    const target = event.currentTarget;
+    setPlaylistScrolled(target.scrollTop > 180);
+
+    if (target.scrollHeight - target.scrollTop - target.clientHeight < 420) {
+      void loadMorePlaylistTracks();
     }
   }
 
@@ -538,7 +582,18 @@ export function App() {
                 </div>
               </>
             ) : (
-              <div className="playlist-detail">
+              <div className="playlist-detail" onScroll={handlePlaylistScroll}>
+                <div className={playlistScrolled ? "playlist-sticky visible" : "playlist-sticky"}>
+                  <strong>{selectedPlaylist.name}</strong>
+                  <button
+                    className="playlist-play compact-play"
+                    onClick={() => playPlaylist(selectedPlaylist)}
+                    disabled={busy || playlistTracks.length === 0}
+                  >
+                    <Play size={16} />
+                    Play
+                  </button>
+                </div>
                 <div className="playlist-hero">
                   {playlistImage(selectedPlaylist) ? (
                     <img src={playlistImage(selectedPlaylist)} alt="" />
@@ -589,6 +644,7 @@ export function App() {
                     ) : null,
                   )}
                   {loadingPlaylists && <p className="empty">Loading tracks...</p>}
+                  {loadingMoreTracks && <p className="empty">Loading more tracks...</p>}
                   {!loadingPlaylists && playlistTracks.length === 0 && (
                     <p className="empty">No playable tracks here</p>
                   )}
