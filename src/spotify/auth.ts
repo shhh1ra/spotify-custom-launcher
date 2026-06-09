@@ -12,7 +12,14 @@ export type SpotifyTokens = {
 
 export function getStoredTokens(): SpotifyTokens | null {
   const raw = localStorage.getItem(TOKEN_KEY);
-  return raw ? (JSON.parse(raw) as SpotifyTokens) : null;
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as SpotifyTokens;
+  } catch {
+    clearTokens();
+    return null;
+  }
 }
 
 export function storeTokens(tokens: SpotifyTokens) {

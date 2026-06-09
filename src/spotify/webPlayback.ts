@@ -1,4 +1,4 @@
-import { SpotifyTokens } from "./auth";
+import { getStoredTokens, refreshTokens, SpotifyTokens } from "./auth";
 
 export type WebPlaybackDevice = {
   deviceId: string;
@@ -26,7 +26,17 @@ export async function createWebPlaybackDevice(
   return new Promise<WebPlaybackDevice>((resolve, reject) => {
     const player = new Spotify.Player({
       name: "Custom Spotify Client",
-      getOAuthToken: (callback) => callback(tokens.accessToken),
+      getOAuthToken: (callback) => {
+        const storedTokens = getStoredTokens() ?? tokens;
+        if (storedTokens.expiresAt - Date.now() < 60_000) {
+          refreshTokens(storedTokens)
+            .then((nextTokens) => callback(nextTokens.accessToken))
+            .catch(() => callback(storedTokens.accessToken));
+          return;
+        }
+
+        callback(storedTokens.accessToken);
+      },
       volume: 0.75,
     });
 

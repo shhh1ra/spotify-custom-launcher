@@ -17,11 +17,21 @@ body {
   overflow: hidden;
 }
 
+button,
+input {
+  font: inherit;
+}
+
 button {
   border: 0;
   color: inherit;
-  font: inherit;
   cursor: pointer;
+}
+
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .shell {
@@ -29,7 +39,11 @@ button {
   grid-template-columns: 256px 1fr;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 68% 20%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 28rem),
+    radial-gradient(
+      circle at 68% 20%,
+      color-mix(in srgb, var(--accent) 34%, transparent),
+      transparent 28rem
+    ),
     linear-gradient(135deg, #101214 0%, #090b0d 46%, #121518 100%);
 }
 
@@ -63,7 +77,13 @@ button {
 .nav,
 .ghost,
 .primary,
-.device {
+.hero-action,
+.device,
+.device-row,
+.result,
+.search-box,
+.player,
+input {
   -webkit-app-region: no-drag;
 }
 
@@ -90,18 +110,30 @@ button {
   margin-top: auto;
 }
 
+.rail-footer p {
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 13px;
+}
+
 .primary,
-.ghost {
+.ghost,
+.hero-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   min-height: 42px;
-  width: 100%;
   border-radius: 8px;
 }
 
-.primary {
+.primary,
+.ghost {
+  width: 100%;
+}
+
+.primary,
+.hero-action {
   background: var(--accent);
   color: #07100a;
   font-weight: 760;
@@ -114,30 +146,39 @@ button {
 
 .stage {
   display: grid;
-  grid-template-rows: 72px 1fr 112px 92px;
+  grid-template-rows: 72px minmax(0, 1fr) 132px;
   min-width: 0;
-  padding: 0 44px 26px;
+  min-height: 100vh;
+  padding: 0 36px 18px;
 }
 
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-width: 0;
   color: rgba(255, 255, 255, 0.62);
   font-size: 14px;
 }
 
+.topbar span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .now-playing {
   display: grid;
-  grid-template-columns: minmax(260px, 430px) minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 420px) minmax(0, 1fr);
   align-items: center;
   gap: 44px;
+  min-height: 0;
 }
 
 .cover-wrap {
   aspect-ratio: 1;
   width: 100%;
-  max-width: 430px;
+  max-width: 420px;
   border-radius: 8px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.08);
@@ -170,6 +211,7 @@ button {
 .track-copy h1 {
   margin: 0;
   max-width: 820px;
+  overflow-wrap: anywhere;
   font-size: clamp(44px, 7vh, 84px);
   line-height: 0.95;
   letter-spacing: 0;
@@ -182,54 +224,222 @@ button {
   font-weight: 520;
 }
 
-.controls {
+.hero-action {
+  width: auto;
+  margin-top: 28px;
+  padding: 0 18px;
+}
+
+.search-view,
+.devices-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-top: 10px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(720px, 100%);
+  min-height: 52px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.search-box input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #fff;
+}
+
+.search-box input::placeholder {
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.results,
+.devices-view {
+  gap: 10px;
+  overflow-y: auto;
+  padding: 22px 8px 8px 0;
+}
+
+.results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.result,
+.device-row {
+  display: grid;
+  align-items: center;
+  min-width: 0;
+  min-height: 72px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.075);
+  color: #fff;
+  text-align: left;
+}
+
+.result {
+  grid-template-columns: 52px minmax(0, 1fr) 28px;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.result:hover,
+.device-row:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.result img,
+.result > span:first-child {
+  width: 52px;
+  height: 52px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--accent-muted);
+}
+
+.result span,
+.device-row span,
+.mini-track div {
+  min-width: 0;
+}
+
+.result strong,
+.device-row strong,
+.mini-track strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.result small,
+.device-row small,
+.mini-track small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+}
+
+.devices-view {
+  width: min(760px, 100%);
+}
+
+.device-row {
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  padding: 0 16px;
+}
+
+.device-row.active {
+  background: color-mix(in srgb, var(--accent) 24%, rgba(255, 255, 255, 0.08));
+  outline: 1px solid color-mix(in srgb, var(--accent) 72%, white);
+}
+
+.empty {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.player {
+  display: grid;
+  grid-template-columns: minmax(190px, 280px) minmax(360px, 1fr) minmax(150px, 220px);
+  align-items: center;
+  gap: 22px;
+  min-width: 0;
+  min-height: 112px;
+  margin-top: 20px;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(8, 10, 12, 0.72);
+  backdrop-filter: blur(22px);
+}
+
+.mini-track {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mini-track img,
+.mini-track > span {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--accent-muted);
+}
+
+.transport {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.transport-buttons {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: 14px;
 }
 
-.controls button {
+.transport button {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
+  background: transparent;
+}
+
+.transport button:hover {
   background: rgba(255, 255, 255, 0.1);
 }
 
-.controls .play {
-  width: 72px;
-  height: 72px;
+.transport .play {
+  width: 54px;
+  height: 54px;
   background: #fff;
   color: #090b0d;
 }
 
-.device-strip {
+.transport .active-icon {
+  color: var(--accent);
+}
+
+.progress,
+.volume {
   display: flex;
   align-items: center;
   gap: 10px;
-  overflow-x: auto;
-  color: rgba(255, 255, 255, 0.74);
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
 }
 
-.device-strip > div {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: max-content;
-  margin-right: 10px;
+.progress span {
+  width: 40px;
+  text-align: center;
 }
 
-.device {
-  min-width: max-content;
-  min-height: 38px;
-  padding: 0 14px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.device.active {
-  background: rgba(255, 255, 255, 0.18);
-  outline: 1px solid color-mix(in srgb, var(--accent) 64%, white);
+.progress input,
+.volume input {
+  width: 100%;
+  accent-color: var(--accent);
 }

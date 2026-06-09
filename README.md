@@ -8,6 +8,9 @@ Cross-platform desktop Spotify client with a custom React UI, dynamic accent col
 - Derives the accent color from the current album cover.
 - Attempts in-app playback through Spotify Web Playback SDK.
 - Falls back to Spotify Connect controls when in-app playback is unavailable.
+- Searches Spotify tracks and starts playback on the in-app player or active Connect device.
+- Shows available Spotify Connect devices and lets you transfer playback.
+- Supports play/pause, previous/next, seek, volume, shuffle, and repeat controls.
 - Does not access or download raw audio files.
 - Uses Spotify Web API + PKCE OAuth, so no client secret is stored in the app.
 
