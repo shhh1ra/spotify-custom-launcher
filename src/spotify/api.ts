@@ -320,9 +320,9 @@ export async function playTrack(
   });
 }
 
-export async function playContext(
+export async function playTracks(
   tokens: SpotifyTokens,
-  contextUri: string,
+  uris: string[],
   deviceId?: string | null,
 ) {
   const params = new URLSearchParams();
@@ -331,6 +331,26 @@ export async function playContext(
   const suffix = params.size ? `?${params.toString()}` : "";
   return spotifyFetch<void>(`/me/player/play${suffix}`, tokens, {
     method: "PUT",
-    body: JSON.stringify({ context_uri: contextUri }),
+    body: JSON.stringify({ uris }),
+  });
+}
+
+export async function playContext(
+  tokens: SpotifyTokens,
+  contextUri: string,
+  deviceId?: string | null,
+  offsetUri?: string,
+) {
+  const params = new URLSearchParams();
+  if (deviceId) params.set("device_id", deviceId);
+
+  const suffix = params.size ? `?${params.toString()}` : "";
+  const body = offsetUri
+    ? { context_uri: contextUri, offset: { uri: offsetUri } }
+    : { context_uri: contextUri };
+
+  return spotifyFetch<void>(`/me/player/play${suffix}`, tokens, {
+    method: "PUT",
+    body: JSON.stringify(body),
   });
 }

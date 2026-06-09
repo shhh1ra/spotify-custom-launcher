@@ -32,6 +32,7 @@ import {
   getSavedTracks,
   playContext,
   playTrack,
+  playTracks,
   PlaylistSummary,
   PlaylistTrack,
   PlaybackState,
@@ -459,6 +460,44 @@ export function App() {
     setView("now");
   }
 
+  function playPlaylistTrack(trackToPlay: SpotifyTrack, index: number) {
+    if (!tokens || !selectedPlaylist) return;
+    void run(
+      async () => {
+        if (webDevice?.deviceId && activeDeviceId !== webDevice.deviceId) {
+          await transferPlayback(tokens, webDevice.deviceId, false);
+        }
+
+        const restoreShuffle = Boolean(playback?.shuffle_state);
+        if (restoreShuffle) {
+          await setShuffle(tokens, false);
+        }
+
+        if (selectedPlaylist.kind === "playlist" && selectedPlaylist.uri) {
+          await playContext(tokens, selectedPlaylist.uri, targetDeviceId, trackToPlay.uri);
+          if (restoreShuffle) await setShuffle(tokens, true);
+          return;
+        }
+
+        const nextUris = playlistTracks
+          .slice(index)
+          .map((item) => playlistTrack(item)?.uri)
+          .filter((uri): uri is string => Boolean(uri));
+
+        if (nextUris.length > 1) {
+          await playTracks(tokens, nextUris, targetDeviceId);
+          if (restoreShuffle) await setShuffle(tokens, true);
+          return;
+        }
+
+        await playTrack(tokens, trackToPlay.uri, targetDeviceId);
+        if (restoreShuffle) await setShuffle(tokens, true);
+      },
+      `Playing ${trackToPlay.name}`,
+    );
+    setView("now");
+  }
+
   function playPlaylist(playlist: PlaylistSummary) {
     if (!tokens) return;
     void run(
@@ -710,7 +749,7 @@ export function App() {
                       <button
                         className="track-row"
                         key={`${savedTrack.uri}-${index}`}
-                        onClick={() => play(savedTrack)}
+                        onClick={() => playPlaylistTrack(savedTrack, index)}
                         disabled={busy}
                       >
                         <span>{index + 1}</span>
