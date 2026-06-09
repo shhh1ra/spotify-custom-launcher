@@ -89,6 +89,7 @@ export function App() {
   const [playlistHasMore, setPlaylistHasMore] = useState(false);
   const [playlistOffset, setPlaylistOffset] = useState(0);
   const [playlistScrolled, setPlaylistScrolled] = useState(false);
+  const [localVolume, setLocalVolume] = useState(75);
   const [busy, setBusy] = useState(false);
   const [localProgress, setLocalProgress] = useState(0);
 
@@ -103,7 +104,7 @@ export function App() {
 
   const activeDeviceId = playback?.device?.id ?? devices.find((device) => device.is_active)?.id;
   const targetDeviceId = webDevice?.deviceId ?? activeDeviceId;
-  const volume = playback?.device?.volume_percent ?? 75;
+  const volume = playback?.device?.volume_percent ?? localVolume;
   const duration = track?.duration_ms ?? 0;
   const progressPercent = duration ? (localProgress / duration) * 100 : 0;
 
@@ -116,6 +117,9 @@ export function App() {
     setPlayback(nextPlayback ?? null);
     setDevices(nextDevices.devices);
     setLocalProgress(nextPlayback?.progress_ms ?? 0);
+    if (nextPlayback?.device?.volume_percent !== null && nextPlayback?.device?.volume_percent !== undefined) {
+      setLocalVolume(nextPlayback.device.volume_percent);
+    }
     setStatus(nextPlayback?.device ? "Connected" : "Choose a Spotify device");
   }
 
@@ -411,6 +415,7 @@ export function App() {
 
   function changeVolume(value: number) {
     if (!tokens) return;
+    setLocalVolume(value);
     setPlayback((previous) =>
       previous?.device
         ? { ...previous, device: { ...previous.device, volume_percent: value } }
@@ -802,10 +807,13 @@ export function App() {
               type="range"
               min={0}
               max={100}
-              value={volume}
-              onChange={(event) => changeVolume(Number(event.target.value))}
+              value={localVolume}
+              onChange={(event) => setLocalVolume(Number(event.target.value))}
+              onMouseUp={(event) => changeVolume(Number(event.currentTarget.value))}
+              onTouchEnd={(event) => changeVolume(Number(event.currentTarget.value))}
+              onKeyUp={(event) => changeVolume(Number(event.currentTarget.value))}
               disabled={!playback?.device || busy}
-              style={rangeStyle(volume)}
+              style={rangeStyle(localVolume)}
             />
           </div>
         </footer>

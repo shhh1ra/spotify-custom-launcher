@@ -676,8 +676,10 @@ input {
   grid-row: 1 / 3;
   grid-template-columns: 56px minmax(0, 1fr);
   align-items: center;
+  align-self: center;
   gap: 12px;
   min-width: 0;
+  transform: translateY(-8px);
 }
 
 .mini-track img,
@@ -692,7 +694,7 @@ input {
 .transport {
   display: grid;
   grid-row: 1 / 3;
-  grid-template-rows: 54px 24px;
+  grid-template-rows: 49px 24px;
   gap: 10px;
   justify-self: center;
   width: min(620px, 100%);
@@ -763,6 +765,7 @@ input {
 
 .progress {
   width: 100%;
+  transform: translateY(-5px);
 }
 
 .compact-volume {
@@ -772,7 +775,7 @@ input {
   justify-self: end;
   width: min(190px, 100%);
   padding-right: 12px;
-  transform: translateY(-1px);
+  transform: translateY(-12px);
 }
 
 .progress input,
