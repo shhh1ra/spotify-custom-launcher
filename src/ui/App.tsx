@@ -123,26 +123,27 @@ export function App() {
         getSavedTracks(nextTokens, 1),
         getMyPlaylists(nextTokens),
       ]);
+      const playlistItems = myPlaylists?.items ?? [];
 
       const likedSongs: PlaylistSummary = {
         id: "liked",
         name: "Liked Songs",
         description: "Saved tracks",
         owner: profile?.display_name ?? "You",
-        total: savedTracks.total,
+        total: savedTracks?.total ?? 0,
         kind: "liked",
       };
 
       setPlaylists([
         likedSongs,
-        ...myPlaylists.items.map((playlist) => ({
+        ...playlistItems.map((playlist) => ({
           id: playlist.id,
           name: playlist.name,
           uri: playlist.uri,
           description: playlist.description,
           image: playlist.images?.[0]?.url,
-          owner: playlist.owner.display_name ?? playlist.owner.id,
-          total: playlist.tracks.total,
+          owner: playlist.owner?.display_name ?? playlist.owner?.id ?? "Unknown",
+          total: playlist.tracks?.total ?? 0,
           kind: "playlist" as const,
         })),
       ]);
@@ -163,7 +164,7 @@ export function App() {
         playlist.kind === "liked"
           ? await getSavedTracks(tokens, 50)
           : await getPlaylistTracks(tokens, playlist.id, 100);
-      setPlaylistTracks(response.items.filter((item) => item.track?.uri));
+      setPlaylistTracks((response?.items ?? []).filter((item) => item.track?.uri));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Playlist tracks unavailable");
       setPlaylistTracks([]);
@@ -713,6 +714,7 @@ export function App() {
                 className={playback?.repeat_state && playback.repeat_state !== "off" ? "active-icon" : ""}
                 onClick={cycleRepeat}
                 title="Repeat"
+                aria-label={playback?.repeat_state === "track" ? "Repeat one" : "Repeat"}
                 disabled={!playback || busy}
               >
                 <Repeat size={18} />
@@ -721,32 +723,34 @@ export function App() {
 
             <div className="progress">
               <span>{formatTime(localProgress)}</span>
-              <input
-                type="range"
-                min={0}
-                max={duration || 1}
-                value={Math.min(localProgress, duration || 1)}
-                onChange={(event) => setLocalProgress(Number(event.target.value))}
-                onMouseUp={(event) => seek(Number(event.currentTarget.value))}
-                onKeyUp={(event) => seek(Number(event.currentTarget.value))}
-                disabled={!track || busy}
-                style={rangeStyle(progressPercent)}
-              />
+              <div className="progress-slider">
+                <input
+                  type="range"
+                  min={0}
+                  max={duration || 1}
+                  value={Math.min(localProgress, duration || 1)}
+                  onChange={(event) => setLocalProgress(Number(event.target.value))}
+                  onMouseUp={(event) => seek(Number(event.currentTarget.value))}
+                  onKeyUp={(event) => seek(Number(event.currentTarget.value))}
+                  disabled={!track || busy}
+                  style={rangeStyle(progressPercent)}
+                />
+              </div>
               <span>{formatTime(duration)}</span>
-            </div>
-          </div>
 
-          <div className="volume">
-            <Volume2 size={18} />
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={volume}
-              onChange={(event) => changeVolume(Number(event.target.value))}
-              disabled={!playback?.device || busy}
-              style={rangeStyle(volume)}
-            />
+              <div className="volume compact-volume">
+                <Volume2 size={18} />
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={volume}
+                  onChange={(event) => changeVolume(Number(event.target.value))}
+                  disabled={!playback?.device || busy}
+                  style={rangeStyle(volume)}
+                />
+              </div>
+            </div>
           </div>
         </footer>
       </section>

@@ -548,9 +548,9 @@ input {
 
 .player {
   display: grid;
-  grid-template-columns: minmax(190px, 280px) minmax(360px, 1fr) minmax(150px, 220px);
+  grid-template-columns: minmax(190px, 280px) minmax(420px, 1fr);
   align-items: center;
-  gap: 22px;
+  gap: 32px;
   min-width: 0;
   min-height: 112px;
   margin-top: 20px;
@@ -592,6 +592,7 @@ input {
 }
 
 .transport button {
+  position: relative;
   display: grid;
   place-items: center;
   width: 40px;
@@ -615,6 +616,21 @@ input {
   color: #1ed760;
 }
 
+.transport .active-icon[title="Repeat"]::after {
+  content: "1";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: none;
+  font-size: 9px;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.transport .active-icon[aria-label="Repeat one"]::after {
+  display: block;
+}
+
 .progress,
 .volume {
   display: flex;
@@ -628,6 +644,21 @@ input {
 .progress span {
   width: 40px;
   text-align: center;
+}
+
+.progress {
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
+.progress-slider {
+  flex: 1 1 360px;
+  min-width: 180px;
+}
+
+.compact-volume {
+  flex: 0 0 170px;
+  margin-left: 24px;
 }
 
 .progress input,
