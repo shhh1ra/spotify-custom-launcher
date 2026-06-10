@@ -15,6 +15,7 @@ import {
   SkipBack,
   SkipForward,
   Volume2,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -33,6 +34,7 @@ import {
   getPlayback,
   getQueue,
   getSavedTracks,
+  isSpotifyAuthError,
   isSpotifyRateLimitError,
   playContext,
   playTrack,
@@ -63,6 +65,7 @@ import {
   rememberTrackImages,
   saveCachedPlaylists,
 } from "./cache";
+import { AppSettings, loadSettings, saveSettings } from "./settings";
 import { useAccent } from "./useAccent";
 
 type View = "now" | "playlists" | "search" | "devices" | "lyrics";
@@ -122,6 +125,9 @@ export function App() {
   const [localVolume, setLocalVolume] = useState(75);
   const [busy, setBusy] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [authExpiredOpen, setAuthExpiredOpen] = useState(false);
+  const [appSettings, setAppSettings] = useState<AppSettings>(() => loadSettings());
   const [localProgress, setLocalProgress] = useState(0);
   const playlistLoadVersion = useRef(0);
   const libraryRateLimitUntil = useRef(0);
@@ -163,7 +169,7 @@ export function App() {
   }, [playlistTrackQuery, playlistTracks]);
 
   function isLibraryRateLimited() {
-    return Date.now() < libraryRateLimitUntil.current;
+    return appSettings.rateLimitGuardEnabled && Date.now() < libraryRateLimitUntil.current;
   }
 
   function handleLibraryRateLimit(
@@ -172,12 +178,61 @@ export function App() {
   ) {
     if (!isSpotifyRateLimitError(error)) return false;
 
+    if (!appSettings.rateLimitGuardEnabled) {
+      setStatus("Rate limit guard is off, but Spotify still rejected this request.");
+      return true;
+    }
+
     libraryRateLimitUntil.current = Math.max(
       libraryRateLimitUntil.current,
       Date.now() + error.retryAfterMs,
     );
     setStatus(fallback);
     return true;
+  }
+
+  function updateSettings(nextSettings: AppSettings) {
+    setAppSettings(nextSettings);
+    saveSettings(nextSettings);
+    if (!nextSettings.rateLimitGuardEnabled) {
+      libraryRateLimitUntil.current = 0;
+      setStatus("Rate limit guard disabled");
+    } else {
+      setStatus("Rate limit guard enabled");
+    }
+  }
+
+  function resetSession(clearCache = false) {
+    clearTokens();
+    setTokens(null);
+    setProfile(null);
+    setPlayback(null);
+    setQueueState(null);
+    setDevices([]);
+    setWebDevice(null);
+    setSelectedPlaylist(null);
+    setPlaylistTracks([]);
+    setPlaylistTrackQuery("");
+    setProfileMenuOpen(false);
+    if (clearCache) {
+      setPlaylists([]);
+      clearUiCache();
+    }
+  }
+
+  function handleAuthExpired(error: unknown) {
+    if (!isSpotifyAuthError(error)) return false;
+
+    resetSession(false);
+    setAuthExpiredOpen(true);
+    setStatus("Spotify session expired");
+    return true;
+  }
+
+  function spotifyErrorMessage(error: unknown, fallback: string) {
+    if (isSpotifyRateLimitError(error)) return error.message;
+    if (error instanceof Error) return error.message;
+    return fallback;
   }
 
   async function refreshState(nextTokens = tokens) {
@@ -240,6 +295,7 @@ export function App() {
       setPlaylists(nextPlaylists);
       saveCachedPlaylists(nextPlaylists);
     } catch (error) {
+      if (handleAuthExpired(error)) return;
       if (handleLibraryRateLimit(error)) return;
       setStatus(
         playlists.length > 0
@@ -284,6 +340,7 @@ export function App() {
       setPlaylistOffset(items.length);
       setPlaylistHasMore(Boolean(response?.next));
     } catch (error) {
+      if (handleAuthExpired(error)) return;
       setStatus(playlistStatusMessage(error, "Playlist tracks unavailable"));
       setPlaylistTracks([]);
     } finally {
@@ -321,6 +378,7 @@ export function App() {
       setPlaylistOffset((current) => current + items.length);
       setPlaylistHasMore(Boolean(response?.next));
     } catch (error) {
+      if (handleAuthExpired(error)) return;
       setStatus(playlistStatusMessage(error, "More tracks unavailable"));
     } finally {
       setLoadingMoreTracks(false);
@@ -349,6 +407,7 @@ export function App() {
         await refreshState(nextTokens);
       })
       .catch((error) => {
+        if (handleAuthExpired(error)) return;
         if (!handleLibraryRateLimit(error, "Spotify is rate limiting playlists. Login finished, waiting.")) {
           setStatus("Login failed");
         }
@@ -364,7 +423,8 @@ export function App() {
         if (active) setProfile(nextProfile);
       })
       .catch((error) => {
-        if (active && !handleLibraryRateLimit(error)) setStatus("Profile unavailable");
+        if (!active || handleAuthExpired(error)) return;
+        if (!handleLibraryRateLimit(error)) setStatus(spotifyErrorMessage(error, "Profile unavailable"));
       });
     void loadPlaylists(tokens);
 
@@ -373,6 +433,7 @@ export function App() {
         await refreshState(tokens);
       } catch (error) {
         if (!active) return;
+        if (handleAuthExpired(error)) return;
         setStatus(error instanceof Error ? error.message : "Waiting for Spotify");
       }
     };
@@ -461,8 +522,9 @@ export function App() {
           }
         })
         .catch((error) => {
-          if (active && !handleLibraryRateLimit(error, "Spotify is rate limiting search.")) {
-            setStatus("Search unavailable");
+          if (!active || handleAuthExpired(error)) return;
+          if (!handleLibraryRateLimit(error, "Spotify is rate limiting search.")) {
+            setStatus(spotifyErrorMessage(error, "Search unavailable"));
           }
         })
         .finally(() => {
@@ -481,23 +543,13 @@ export function App() {
       setStatus("Add Spotify client id to .env");
       return;
     }
+    setAuthExpiredOpen(false);
     window.location.href = await buildLoginUrl();
   }
 
   function signOut() {
-    clearTokens();
-    setTokens(null);
-    setProfile(null);
-    setPlayback(null);
-    setQueueState(null);
-    setDevices([]);
-    setWebDevice(null);
-    setPlaylists([]);
-    clearUiCache();
-    setSelectedPlaylist(null);
-    setPlaylistTracks([]);
-    setPlaylistTrackQuery("");
-    setProfileMenuOpen(false);
+    setAuthExpiredOpen(false);
+    resetSession(true);
   }
 
   async function run(action: () => Promise<void>, message = "Updating playback") {
@@ -508,6 +560,7 @@ export function App() {
       await action();
       await refreshState(tokens);
     } catch (error) {
+      if (handleAuthExpired(error)) return;
       setStatus(error instanceof Error ? error.message : "Spotify command failed");
     } finally {
       setBusy(false);
@@ -728,7 +781,12 @@ export function App() {
             <div className="profile-menu-wrap">
               {profileMenuOpen && (
                 <div className="profile-menu">
-                  <button onClick={() => setStatus("Settings are not ready yet")}>
+                  <button
+                    onClick={() => {
+                      setSettingsOpen(true);
+                      setProfileMenuOpen(false);
+                    }}
+                  >
                     <Settings size={16} />
                     Settings
                   </button>
@@ -1111,6 +1169,60 @@ export function App() {
           </div>
         </footer>
       </section>
+
+      {settingsOpen && (
+        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
+          <section className="settings-dialog" onClick={(event) => event.stopPropagation()}>
+            <header className="settings-header">
+              <div>
+                <span>Custom Spotify</span>
+                <h2>Settings</h2>
+              </div>
+              <button className="settings-close" onClick={() => setSettingsOpen(false)} title="Close">
+                <X size={18} />
+              </button>
+            </header>
+
+            <label className="settings-row">
+              <span>
+                <strong>Rate limit guard</strong>
+                <small>Pause playlist and search requests when Spotify returns too many requests.</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={appSettings.rateLimitGuardEnabled}
+                onChange={(event) =>
+                  updateSettings({
+                    ...appSettings,
+                    rateLimitGuardEnabled: event.target.checked,
+                  })
+                }
+              />
+              <i />
+            </label>
+          </section>
+        </div>
+      )}
+
+      {authExpiredOpen && (
+        <div className="settings-overlay session-overlay">
+          <section className="settings-dialog session-dialog">
+            <header className="settings-header">
+              <div>
+                <span>Spotify session</span>
+                <h2>Sign in again</h2>
+              </div>
+            </header>
+            <p className="session-copy">
+              Spotify says the authorization key is no longer valid. Connect your account again to continue.
+            </p>
+            <button className="hero-action session-action" onClick={login}>
+              <LogIn size={18} />
+              Connect Spotify
+            </button>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

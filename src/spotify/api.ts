@@ -7,7 +7,7 @@ export class SpotifyRateLimitError extends Error {
 
   constructor(retryAfterMs: number) {
     const seconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
-    super(`Spotify rate limit active. Retrying in ${seconds}s.`);
+    super(`Spotify rejected this request: too many requests. Try again in ${seconds}s.`);
     this.name = "SpotifyRateLimitError";
     this.retryAfterMs = retryAfterMs;
   }
@@ -15,6 +15,17 @@ export class SpotifyRateLimitError extends Error {
 
 export function isSpotifyRateLimitError(error: unknown): error is SpotifyRateLimitError {
   return error instanceof SpotifyRateLimitError;
+}
+
+export class SpotifyAuthError extends Error {
+  constructor(message = "Spotify authorization expired.") {
+    super(message);
+    this.name = "SpotifyAuthError";
+  }
+}
+
+export function isSpotifyAuthError(error: unknown): error is SpotifyAuthError {
+  return error instanceof SpotifyAuthError;
 }
 
 async function parseSpotifyResponse<T>(response: Response): Promise<T> {
@@ -27,6 +38,10 @@ async function parseSpotifyResponse<T>(response: Response): Promise<T> {
     if (response.status === 429) {
       const retryAfter = Number(response.headers.get("retry-after") ?? "60");
       throw new SpotifyRateLimitError(Math.max(1, retryAfter) * 1000);
+    }
+
+    if (response.status === 401) {
+      throw new SpotifyAuthError("Spotify authorization expired.");
     }
 
     let message = text;
@@ -59,7 +74,7 @@ export async function spotifyFetch<T>(
   init: RequestInit = {},
 ): Promise<T> {
   const usableTokens =
-    tokens.expiresAt - Date.now() < 60_000 ? await refreshTokens(tokens) : tokens;
+    tokens.expiresAt - Date.now() < 60_000 ? await refreshSpotifyTokens(tokens) : tokens;
 
   const response = await fetch(`${API_ROOT}${path}`, {
     ...init,
@@ -79,7 +94,7 @@ export async function spotifyFetchUrl<T>(
   init: RequestInit = {},
 ): Promise<T> {
   const usableTokens =
-    tokens.expiresAt - Date.now() < 60_000 ? await refreshTokens(tokens) : tokens;
+    tokens.expiresAt - Date.now() < 60_000 ? await refreshSpotifyTokens(tokens) : tokens;
 
   const response = await fetch(url, {
     ...init,
@@ -91,6 +106,14 @@ export async function spotifyFetchUrl<T>(
   });
 
   return parseSpotifyResponse<T>(response);
+}
+
+async function refreshSpotifyTokens(tokens: SpotifyTokens) {
+  try {
+    return await refreshTokens(tokens);
+  } catch {
+    throw new SpotifyAuthError("Spotify authorization expired.");
+  }
 }
 
 export type SpotifyImage = { url: string; width: number; height: number };
