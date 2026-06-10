@@ -126,6 +126,7 @@ input:disabled {
 .settings-dialog,
 .settings-close,
 .settings-row,
+.accent-settings,
 .session-action,
 input {
   -webkit-app-region: no-drag;
@@ -236,7 +237,7 @@ input {
 
 .queue-source-icon {
   flex: 0 0 auto;
-  color: #1ed760;
+  color: var(--control-active, #1ed760);
 }
 
 .queue-empty {
@@ -361,6 +362,8 @@ input {
 }
 
 .settings-dialog {
+  display: grid;
+  gap: 12px;
   width: min(520px, calc(100vw - 48px));
   padding: 20px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -374,7 +377,7 @@ input {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin-bottom: 6px;
 }
 
 .settings-header span {
@@ -470,6 +473,70 @@ input {
 
 .settings-row input:checked + i::after {
   transform: translateX(20px);
+}
+
+.accent-settings {
+  display: grid;
+  grid-template-columns: 40px 46px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.accent-preview {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  box-shadow: 0 0 24px var(--accent-muted);
+}
+
+.accent-picker {
+  width: 44px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.accent-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.accent-picker::-webkit-color-swatch {
+  border: 0;
+  border-radius: 8px;
+}
+
+.accent-settings label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.accent-settings label span {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+}
+
+.accent-settings label input {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  color: #fff;
+  font: inherit;
+}
+
+.accent-settings label input:focus {
+  outline: 1px solid var(--accent);
 }
 
 .session-overlay {
@@ -1155,7 +1222,7 @@ input {
 }
 
 .transport .active-icon {
-  color: #1ed760;
+  color: var(--control-active, #1ed760);
 }
 
 .transport .active-icon[title="Repeat"]::after {
@@ -1220,7 +1287,7 @@ input {
 }
 
 .lyrics-toggle.active-icon {
-  color: #1ed760;
+  color: var(--control-active, #1ed760);
 }
 
 .progress input,

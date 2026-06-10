@@ -1,17 +1,23 @@
 # Custom Spotify Client
 
-Cross-platform desktop Spotify client with a custom React UI, dynamic accent color, Spotify Web Playback SDK support where available, and Spotify Connect controller fallback.
+Cross-platform desktop Spotify client with a custom React UI, dynamic or custom accent color, Spotify Web Playback SDK support where available, and Spotify Connect controller fallback.
 
 ## What it does
 
 - Uses your own desktop UI instead of Spotify's native shell.
-- Derives the accent color from the current album cover.
+- Derives the accent color from the current album cover, or uses a saved custom accent from Settings.
 - Attempts in-app playback through Spotify Web Playback SDK.
 - Falls back to Spotify Connect controls when in-app playback is unavailable.
-- Searches Spotify tracks and starts playback on the in-app player or active Connect device.
-- Shows Liked Songs and Spotify playlists, with a full-screen track list view.
+- Searches Spotify tracks globally and inside loaded playlists.
+- Shows Liked Songs and Spotify playlists, with a full-screen track list view and playlist search.
+- Loads full playlist track lists for local filtering instead of stopping at the first page.
+- Caches playlist metadata, playlist covers, track images, and playlist track counts for faster startup.
+- Shows a compact "Up next" sidebar preview.
+- Adds tracks to the Spotify queue from a right-click track menu.
 - Shows available Spotify Connect devices and lets you transfer playback.
 - Supports play/pause, previous/next, seek, volume, shuffle, and repeat controls.
+- Includes a lyrics screen shell, ready for a future lyrics provider.
+- Includes a Settings dialog with rate-limit guard and custom accent controls.
 - Does not access or download raw audio files.
 - Uses Spotify Web API + PKCE OAuth, so no client secret is stored in the app.
 
@@ -46,6 +52,27 @@ Cross-platform desktop Spotify client with a custom React UI, dynamic accent col
    ```
 
 If scopes change during development, sign out in the app and connect Spotify again.
+
+## Build
+
+Create a production build:
+
+```bash
+npm run build
+```
+
+Build a Windows installer:
+
+```bash
+npm run dist:win
+```
+
+The Windows output is written to `release/`.
+
+## Settings
+
+- Rate limit guard: pauses playlist and search refreshes when Spotify returns `429 Too Many Requests`.
+- Custom accent color: replaces the dynamic album-cover accent across the UI, including the background glow and active controls. The selected color is saved locally and restored after restart.
 
 ## Spotify limitations
 

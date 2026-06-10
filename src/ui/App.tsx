@@ -102,6 +102,13 @@ function rangeStyle(percent: number) {
   return { "--range-fill": `${Math.min(100, Math.max(0, percent))}%` } as React.CSSProperties;
 }
 
+function normalizeHexColor(value: string) {
+  const trimmed = value.trim();
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed;
+  if (/^[0-9a-f]{6}$/i.test(trimmed)) return `#${trimmed}`;
+  return null;
+}
+
 function playlistStatusMessage(error: unknown, fallback: string) {
   if (!(error instanceof Error)) return fallback;
   return error.message;
@@ -147,6 +154,13 @@ export function App() {
   const track = playback?.item ?? null;
   const cover = bestImage(track);
   const accent = useAccent(cover);
+  const customAccent = normalizeHexColor(appSettings.customAccentColor);
+  const activeAccent =
+    appSettings.customAccentEnabled && customAccent
+      ? { primary: customAccent, muted: customAccent }
+      : accent;
+  const activeControlAccent =
+    appSettings.customAccentEnabled && customAccent ? customAccent : "#1ed760";
 
   const artists = useMemo(
     () => track?.artists.map((artist) => artist.name).join(", ") ?? "No active track",
@@ -203,15 +217,10 @@ export function App() {
     return true;
   }
 
-  function updateSettings(nextSettings: AppSettings) {
+  function updateSettings(nextSettings: AppSettings, message?: string) {
     setAppSettings(nextSettings);
     saveSettings(nextSettings);
-    if (!nextSettings.rateLimitGuardEnabled) {
-      libraryRateLimitUntil.current = 0;
-      setStatus("Rate limit guard disabled");
-    } else {
-      setStatus("Rate limit guard enabled");
-    }
+    if (message) setStatus(message);
   }
 
   function resetSession(clearCache = false) {
@@ -786,8 +795,9 @@ export function App() {
       className="shell"
       style={
         {
-          "--accent": accent.primary,
-          "--accent-muted": accent.muted,
+          "--accent": activeAccent.primary,
+          "--accent-muted": activeAccent.muted,
+          "--control-active": activeControlAccent,
         } as React.CSSProperties
       }
     >
@@ -1280,15 +1290,84 @@ export function App() {
               <input
                 type="checkbox"
                 checked={appSettings.rateLimitGuardEnabled}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  if (!enabled) libraryRateLimitUntil.current = 0;
+                  updateSettings(
+                    {
+                      ...appSettings,
+                      rateLimitGuardEnabled: enabled,
+                    },
+                    enabled ? "Rate limit guard enabled" : "Rate limit guard disabled",
+                  );
+                }}
+              />
+              <i />
+            </label>
+
+            <label className="settings-row">
+              <span>
+                <strong>Custom accent color</strong>
+                <small>Override album colors throughout the app, including the background glow.</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={appSettings.customAccentEnabled}
                 onChange={(event) =>
-                  updateSettings({
-                    ...appSettings,
-                    rateLimitGuardEnabled: event.target.checked,
-                  })
+                  updateSettings(
+                    {
+                      ...appSettings,
+                      customAccentEnabled: event.target.checked,
+                    },
+                    event.target.checked ? "Custom accent enabled" : "Dynamic accent enabled",
+                  )
                 }
               />
               <i />
             </label>
+
+            {appSettings.customAccentEnabled && (
+              <div className="accent-settings">
+                <span
+                  className="accent-preview"
+                  style={{ background: customAccent ?? "#1ed760" }}
+                />
+                <input
+                  className="accent-picker"
+                  type="color"
+                  value={customAccent ?? "#1ed760"}
+                  onChange={(event) =>
+                    updateSettings({
+                      ...appSettings,
+                      customAccentColor: event.target.value,
+                    })
+                  }
+                />
+                <label>
+                  <span>HEX</span>
+                  <input
+                    value={appSettings.customAccentColor}
+                    onChange={(event) =>
+                      updateSettings({
+                        ...appSettings,
+                        customAccentColor: event.target.value,
+                      })
+                    }
+                    onBlur={() => {
+                      const nextColor = normalizeHexColor(appSettings.customAccentColor) ?? "#1ed760";
+                      updateSettings(
+                        {
+                          ...appSettings,
+                          customAccentColor: nextColor,
+                        },
+                        "Accent color updated",
+                      );
+                    }}
+                    placeholder="#1ed760"
+                  />
+                </label>
+              </div>
+            )}
           </section>
         </div>
       )}
