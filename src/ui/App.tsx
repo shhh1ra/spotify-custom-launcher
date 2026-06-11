@@ -68,8 +68,10 @@ import {
 import { createWebPlaybackDevice, WebPlaybackDevice } from "../spotify/webPlayback";
 import { spotifyConfig } from "../spotify/config";
 import {
+  cacheImageBlob,
   cachedTrackImage,
   clearUiCache,
+  getCachedImageObjectUrl,
   loadCachedPlaylists,
   loadCachedPlaylistTracks,
   mergeCachedPlaylistMetadata,
@@ -78,7 +80,7 @@ import {
   saveCachedPlaylistTracks,
 } from "./cache";
 import { AppSettings, loadSettings, saveSettings } from "./settings";
-import { useAccent } from "./useAccent";
+import { preloadTrackAccent, useAccent } from "./useAccent";
 
 type View = "now" | "playlists" | "search" | "devices" | "lyrics";
 type TrackMenuState = {
@@ -165,18 +167,24 @@ export function App() {
   const [trackMenu, setTrackMenu] = useState<TrackMenuState>(null);
   const [railCollapsed, setRailCollapsed] = useState(() => loadRailCollapsed());
   const [queueVisible, setQueueVisible] = useState(true);
+  const [pocketQueueTracks, setPocketQueueTracks] = useState<SpotifyTrack[]>([]);
   const [manualQueueUris, setManualQueueUris] = useState<string[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings>(() => loadSettings());
   const [localProgress, setLocalProgress] = useState(0);
+  const [cachedImageUrls, setCachedImageUrls] = useState<Record<string, string>>({});
   const playlistLoadVersion = useRef(0);
   const libraryRateLimitUntil = useRef(0);
   const previousGlowTrackUri = useRef<string | null>(null);
+  const preloadedVisualTrackUris = useRef<Set<string>>(new Set());
+  const optimisticTransitionFromUri = useRef<string | null>(null);
+  const pocketQueueLockedUntil = useRef(0);
   const profileExpandedRail = useRef(false);
   const [glowEntering, setGlowEntering] = useState(false);
 
   const track = playback?.item ?? null;
-  const cover = bestImage(track);
-  const accent = useAccent(cover);
+  const rawCover = bestImage(track);
+  const cover = rawCover ? cachedImageUrls[rawCover] ?? rawCover : undefined;
+  const accent = useAccent(rawCover, track?.id);
   const customAccent = normalizeHexColor(appSettings.customAccentColor);
   const activeAccent =
     appSettings.customAccentEnabled && customAccent
@@ -212,7 +220,7 @@ export function App() {
       ? Math.max(0, Math.min(1, (remainingMs - glowOutroEndMs) / glowFadeMs))
       : 1;
   const profileImage = profile?.images?.[0]?.url;
-  const nextQueueTracks = queueState?.queue.filter((item) => item?.uri).slice(0, 5) ?? [];
+  const nextQueueTracks = pocketQueueTracks.slice(0, 5);
   const targetPlaylists = useMemo(
     () => playlists.filter((playlist) => playlist.kind === "playlist" && playlist.editable),
     [playlists],
@@ -236,6 +244,32 @@ export function App() {
       return haystack.includes(normalizedQuery);
     });
   }, [playlistTrackQuery, playlistTracks]);
+
+  function displayTrackImage(displayTrack?: SpotifyTrack | null) {
+    const imageUrl = bestImage(displayTrack);
+    return imageUrl ? cachedImageUrls[imageUrl] ?? imageUrl : undefined;
+  }
+
+  function rememberLocalImage(sourceUrl: string, localUrl: string | null) {
+    if (!localUrl || localUrl === cachedImageUrls[sourceUrl]) return;
+    setCachedImageUrls((current) =>
+      current[sourceUrl] === localUrl ? current : { ...current, [sourceUrl]: localUrl },
+    );
+  }
+
+  function queueTracksFromState(state?: QueueState | null, currentUri?: string | null) {
+    return (
+      state?.queue.filter(
+        (item) => item?.uri && (!currentUri || item.uri !== currentUri),
+      ) ?? []
+    );
+  }
+
+  function syncPocketQueue(state?: QueueState | null, force = false, currentUri?: string | null) {
+    if (force) pocketQueueLockedUntil.current = 0;
+    if (!force && Date.now() < pocketQueueLockedUntil.current) return;
+    setPocketQueueTracks(queueTracksFromState(state, currentUri));
+  }
 
   function isLibraryRateLimited() {
     return appSettings.rateLimitGuardEnabled && Date.now() < libraryRateLimitUntil.current;
@@ -293,12 +327,96 @@ export function App() {
     setProfileMenuOpen(true);
   }
 
+  function prepareTrackVisuals(nextTrack?: SpotifyTrack | null) {
+    const nextImage = bestImage(nextTrack);
+    if (!nextTrack?.id || !nextTrack.uri || !nextImage) return;
+    if (preloadedVisualTrackUris.current.has(nextTrack.uri)) return;
+
+    preloadedVisualTrackUris.current.add(nextTrack.uri);
+    rememberTrackImages([nextTrack]);
+    void getCachedImageObjectUrl(nextImage)
+      .then((localUrl) => rememberLocalImage(nextImage, localUrl))
+      .catch(() => undefined);
+    void cacheImageBlob(nextImage)
+      .then((localUrl) => {
+        rememberLocalImage(nextImage, localUrl);
+        return preloadTrackAccent(nextTrack.id, nextImage, localUrl);
+      })
+      .catch(() => {
+        preloadedVisualTrackUris.current.delete(nextTrack.uri);
+        return preloadTrackAccent(nextTrack.id, nextImage);
+      })
+      .catch(() => preloadedVisualTrackUris.current.delete(nextTrack.uri));
+  }
+
+  function applyOptimisticNext(syncAfterMs = 0, queueLockMs = syncAfterMs) {
+    if (!track?.uri) return null;
+
+    const currentPocketQueue =
+      pocketQueueTracks.length > 0 ? pocketQueueTracks : queueTracksFromState(queueState, track.uri);
+    const nextTrack = currentPocketQueue[0];
+    if (!nextTrack?.uri) return null;
+
+    optimisticTransitionFromUri.current = track.uri;
+    if (queueLockMs > 0) {
+      pocketQueueLockedUntil.current = Date.now() + queueLockMs;
+    }
+    prepareTrackVisuals(nextTrack);
+    prepareTrackVisuals(currentPocketQueue[1]);
+
+    setPlayback((current) =>
+      current
+        ? {
+            ...current,
+            item: nextTrack,
+            progress_ms: 0,
+            is_playing: true,
+          }
+        : current,
+    );
+    setLocalProgress(0);
+    setPocketQueueTracks(currentPocketQueue.slice(1));
+    setQueueState((current) =>
+      current
+        ? {
+            currently_playing: nextTrack,
+            queue: current.queue.slice(1),
+          }
+        : current,
+    );
+
+    if (!tokens || syncAfterMs <= 0) return [];
+
+    const syncTimers = [
+      window.setTimeout(() => {
+        void refreshState(tokens, false).catch((error) => {
+          if (handleAuthExpired(error)) return;
+          setStatus(error instanceof Error ? error.message : "Waiting for Spotify");
+        });
+      }, syncAfterMs),
+    ];
+
+    if (queueLockMs > syncAfterMs) {
+      syncTimers.push(
+        window.setTimeout(() => {
+          void refreshState(tokens, true).catch((error) => {
+            if (handleAuthExpired(error)) return;
+            setStatus(error instanceof Error ? error.message : "Waiting for Spotify");
+          });
+        }, queueLockMs),
+      );
+    }
+
+    return syncTimers;
+  }
+
   function resetSession(clearCache = false) {
     clearTokens();
     setTokens(null);
     setProfile(null);
     setPlayback(null);
     setQueueState(null);
+    setPocketQueueTracks([]);
     setDevices([]);
     setWebDevice(null);
     setSelectedPlaylist(null);
@@ -326,7 +444,7 @@ export function App() {
     return fallback;
   }
 
-  async function refreshState(nextTokens = tokens) {
+  async function refreshState(nextTokens = tokens, forcePocketQueueSync = false) {
     if (!nextTokens) return;
     const [nextPlayback, nextDevices, nextQueue] = await Promise.all([
       getPlayback(nextTokens),
@@ -336,6 +454,7 @@ export function App() {
     setPlayback(nextPlayback ?? null);
     setDevices(nextDevices.devices);
     setQueueState(nextQueue);
+    syncPocketQueue(nextQueue, forcePocketQueueSync, nextPlayback?.item?.uri);
     setLocalProgress(nextPlayback?.progress_ms ?? 0);
     rememberTrackImages([nextPlayback?.item, ...(nextQueue?.queue ?? [])]);
     if (nextPlayback?.device?.volume_percent !== null && nextPlayback?.device?.volume_percent !== undefined) {
@@ -588,6 +707,8 @@ export function App() {
     if (!currentUri || previousGlowTrackUri.current === currentUri) return;
 
     previousGlowTrackUri.current = currentUri;
+    optimisticTransitionFromUri.current = null;
+    preloadedVisualTrackUris.current.clear();
     setGlowEntering(false);
     const startTimer = window.setTimeout(() => setGlowEntering(true), 0);
     const endTimer = window.setTimeout(() => setGlowEntering(false), 700);
@@ -597,6 +718,29 @@ export function App() {
       window.clearTimeout(endTimer);
     };
   }, [track?.uri]);
+
+  useEffect(() => {
+    const nextTrack = pocketQueueTracks[0] ?? queueState?.queue.find((item) => item?.uri);
+    prepareTrackVisuals(track);
+    prepareTrackVisuals(nextTrack);
+  }, [pocketQueueTracks, queueState, track?.uri]);
+
+  useEffect(() => {
+    if (!playback?.is_playing || !duration || remainingMs > 30000) return;
+
+    prepareTrackVisuals(pocketQueueTracks[0] ?? queueState?.queue.find((item) => item?.uri));
+  }, [duration, playback?.is_playing, pocketQueueTracks, queueState, remainingMs]);
+
+  useEffect(() => {
+    if (!tokens || !playback?.is_playing || !track?.uri || !duration) return;
+    if (playback.repeat_state === "track" || remainingMs > 350) return;
+    if (optimisticTransitionFromUri.current === track.uri) return;
+
+    const syncTimers = applyOptimisticNext(2500, 3500);
+    if (!syncTimers) return;
+
+    return () => syncTimers.forEach((timer) => window.clearTimeout(timer));
+  }, [duration, playback?.is_playing, playback?.repeat_state, pocketQueueTracks, queueState, remainingMs, tokens, track?.uri]);
 
   useEffect(() => {
     if (!tokens || webDevice) return;
@@ -728,9 +872,15 @@ export function App() {
 
   function control(action: "toggle" | "next" | "previous") {
     if (!tokens || !playback) return;
+
+    if (action === "next") {
+      applyOptimisticNext(2500, 3500);
+      void run(() => skipNext(tokens), "Skipping track", false);
+      return;
+    }
+
     void run(async () => {
       if (action === "toggle") await togglePlayback(tokens, playback.is_playing);
-      if (action === "next") await skipNext(tokens);
       if (action === "previous") await skipPrevious(tokens);
     });
   }
@@ -978,7 +1128,7 @@ export function App() {
             onClick={() => playQueueItem(queueTrack, index)}
             disabled={busy}
           >
-            {bestImage(queueTrack) ? <img src={bestImage(queueTrack)} alt="" /> : <i />}
+            {displayTrackImage(queueTrack) ? <img src={displayTrackImage(queueTrack)} alt="" /> : <i />}
             <span>
               <strong>{queueTrack.name}</strong>
               <small>
@@ -1264,7 +1414,7 @@ export function App() {
                         disabled={busy}
                       >
                         <span>{trackIndex + 1}</span>
-                        {bestImage(savedTrack) ? <img src={bestImage(savedTrack)} alt="" /> : <i />}
+                        {displayTrackImage(savedTrack) ? <img src={displayTrackImage(savedTrack)} alt="" /> : <i />}
                         <span>
                           <strong>{savedTrack.name}</strong>
                           <small>{savedTrack.artists.map((artist) => artist.name).join(", ")}</small>
@@ -1310,7 +1460,7 @@ export function App() {
                     onContextMenu={(event) => openTrackMenu(event, result)}
                     disabled={busy}
                   >
-                    {bestImage(result) ? <img src={bestImage(result)} alt="" /> : <span />}
+                    {displayTrackImage(result) ? <img src={displayTrackImage(result)} alt="" /> : <span />}
                     <span>
                       <strong>{result.name}</strong>
                       <small>

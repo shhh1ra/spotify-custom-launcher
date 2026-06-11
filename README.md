@@ -11,8 +11,10 @@ Cross-platform desktop Spotify client with a custom React UI, dynamic or custom 
 - Searches Spotify tracks globally and inside loaded playlists.
 - Shows Liked Songs and Spotify playlists, with a full-screen track list view and playlist search.
 - Loads full playlist track lists for local filtering instead of stopping at the first page.
-- Caches playlist metadata, playlist covers, track images, and playlist track counts for faster startup.
-- Shows a compact "Up next" sidebar preview.
+- Caches playlist metadata, playlist covers, track counts, track image URLs, extracted accent colors, and local artwork blobs for faster visual rendering.
+- Preloads the current and next track visuals so album art and background glow switch faster.
+- Uses optimistic UI transitions for natural track changes and the next button, then syncs back to Spotify after a short delay.
+- Shows a compact "Up next" preview with a local pocket-queue snapshot that updates immediately and later reconciles with Spotify.
 - Adds tracks to the Spotify queue from a right-click track menu.
 - Adds tracks to playlists and removes tracks from the current playlist or Liked Songs.
 - Shows available Spotify Connect devices and lets you transfer playback.
@@ -74,6 +76,13 @@ The Windows output is written to `release/`.
 
 - Rate limit guard: pauses playlist and search refreshes when Spotify returns `429 Too Many Requests`.
 - Custom accent color: replaces the dynamic album-cover accent across the UI, including the background glow and active controls. The selected color is saved locally and restored after restart.
+- Borders: toggles accent borders for the app frame, dock, profile button, active sidebar item, and queue panel.
+
+## Local cache and sync
+
+The renderer keeps lightweight UI data in local storage and saves artwork blobs in IndexedDB. This is only for visual speed: album covers, accent colors, playlist metadata, and loaded playlist tracks can be reused without waiting for every Spotify image URL to decode again.
+
+Playback state still comes from Spotify. To avoid slow visual updates between tracks, the app applies an optimistic local transition near the end of a track or when pressing next, updates the pocket queue immediately, and then reconciles with Spotify after the API state has had time to settle.
 
 ## Spotify limitations
 
