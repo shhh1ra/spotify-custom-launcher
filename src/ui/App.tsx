@@ -156,6 +156,8 @@ export function App() {
   const [localProgress, setLocalProgress] = useState(0);
   const playlistLoadVersion = useRef(0);
   const libraryRateLimitUntil = useRef(0);
+  const previousGlowTrackUri = useRef<string | null>(null);
+  const [glowEntering, setGlowEntering] = useState(false);
 
   const track = playback?.item ?? null;
   const cover = bestImage(track);
@@ -178,6 +180,22 @@ export function App() {
   const volume = playback?.device?.volume_percent ?? localVolume;
   const duration = track?.duration_ms ?? 0;
   const progressPercent = duration ? (localProgress / duration) * 100 : 0;
+  const remainingMs = duration ? Math.max(0, duration - localProgress) : 0;
+  const glowOutroStartMs = 8000;
+  const glowOutroEndMs = 3000;
+  const glowFadeMs = 500;
+  const outroProgress =
+    playback?.is_playing && duration && remainingMs <= glowOutroStartMs
+      ? Math.min(
+          1,
+          (glowOutroStartMs - remainingMs) / (glowOutroStartMs - glowOutroEndMs),
+        )
+      : 0;
+  const glowScale = Math.max(0.06, 1 - outroProgress * 0.94);
+  const glowOpacity =
+    playback?.is_playing && duration && remainingMs <= glowOutroEndMs + glowFadeMs
+      ? Math.max(0, Math.min(1, (remainingMs - glowOutroEndMs) / glowFadeMs))
+      : 1;
   const profileImage = profile?.images?.[0]?.url;
   const nextQueueTracks = queueState?.queue.filter((item) => item?.uri).slice(0, 5) ?? [];
   const targetPlaylists = useMemo(
@@ -518,10 +536,25 @@ export function App() {
     if (!playback?.is_playing || !duration) return;
 
     const timer = window.setInterval(() => {
-      setLocalProgress((progress) => Math.min(duration, progress + 1000));
-    }, 1000);
+      setLocalProgress((progress) => Math.min(duration, progress + 250));
+    }, 250);
     return () => window.clearInterval(timer);
   }, [duration, playback?.is_playing]);
+
+  useEffect(() => {
+    const currentUri = track?.uri ?? null;
+    if (!currentUri || previousGlowTrackUri.current === currentUri) return;
+
+    previousGlowTrackUri.current = currentUri;
+    setGlowEntering(false);
+    const startTimer = window.setTimeout(() => setGlowEntering(true), 0);
+    const endTimer = window.setTimeout(() => setGlowEntering(false), 700);
+
+    return () => {
+      window.clearTimeout(startTimer);
+      window.clearTimeout(endTimer);
+    };
+  }, [track?.uri]);
 
   useEffect(() => {
     if (!tokens || webDevice) return;
@@ -891,12 +924,14 @@ export function App() {
 
   return (
     <main
-      className="shell"
+      className={glowEntering ? "shell glow-enter" : "shell"}
       style={
         {
           "--accent": activeAccent.primary,
           "--accent-muted": activeAccent.muted,
           "--control-active": activeControlAccent,
+          "--glow-scale": String(glowScale),
+          "--glow-opacity": String(glowOpacity),
         } as React.CSSProperties
       }
     >
